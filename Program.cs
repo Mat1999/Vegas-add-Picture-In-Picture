@@ -31,20 +31,35 @@ namespace Add_PiP
 			}
 			double proWidth = myVegas.Project.Video.Width;//the project's width
 			double proHeight = myVegas.Project.Video.Height;//the project's height
+			VideoMotionBounds newBound;//variable for the crop's size
+			VideoMotionBounds newerBound;//variable for crop size if the first one doesn't fit the whole picture
 			foreach (VideoEvent pipevent in videvents) {// for each video event in the list
 				Take piptake = pipevent.ActiveTake;//getting the width and height of the event's source
 				VideoStream pipstream = piptake.MediaStream as VideoStream;
 				int myWidth = pipstream.Width;//the event's width
 				int myHeight = pipstream.Height;//the event"s height
 				double proAspect = myWidth/(myHeight*(proWidth/proHeight));//calculating the correct number to multiply later the width/height later
-				VideoMotionBounds newBound;//variable for the crop's size
 				VideoMotionKeyframe reframe = new VideoMotionKeyframe(Timecode.FromFrames(0));//creating a new Pan/Crop keyframe at the beginning of the event
 				pipevent.VideoMotion.Keyframes.Add(reframe);
 				if (myWidth > myHeight){//calculating the size of the pan/crop keyframe with the help of the previously calculated value (proAspect) (EXTREMLY COMPLEX AND DANGEROUS, handle with care)
 					newBound = new VideoMotionBounds(new VideoMotionVertex((float)(reframe.Center.X-(double)(myWidth/2)),(float)(reframe.Center.Y-(double)(myHeight/2)*proAspect)),new VideoMotionVertex((float)(reframe.Center.X+(double)(myWidth/2)),(float)(reframe.Center.Y-(double)(myHeight/2)*proAspect)),new VideoMotionVertex((float)(reframe.Center.X+(double)(myWidth/2)),(float)(reframe.Center.Y+(double)(myHeight/2)*proAspect)),new VideoMotionVertex((float)(reframe.Center.X-(double)(myWidth/2)),(float)(reframe.Center.Y+(double)(myHeight/2)*proAspect)));
+					if (Math.Abs(newBound.TopLeft.Y-newBound.BottomLeft.Y) < myHeight){//if the crop is the correct aspect ration, but it still cuts out part of the image, this code will run and make a cropize, which covers the whole picture with the correct ratio (MORE MATH)
+						float multiply = myHeight/Math.Abs(newBound.TopLeft.Y-newBound.BottomLeft.Y);
+						float actWidth = Math.Abs(newBound.TopRight.X-newBound.TopLeft.X)/2;
+						float toHeight = myHeight/2;
+						newerBound = new VideoMotionBounds(new VideoMotionVertex(reframe.Center.X-actWidth*multiply,reframe.Center.Y-toHeight),new VideoMotionVertex(reframe.Center.X+actWidth*multiply,reframe.Center.Y-toHeight),new VideoMotionVertex(reframe.Center.X+actWidth*multiply,reframe.Center.Y+toHeight),new VideoMotionVertex(reframe.Center.X-actWidth*multiply,reframe.Center.Y+toHeight));
+						newBound = newerBound;
+					}
 				}
-				else{
+				else{//almost same as above, casual math
 					newBound = new VideoMotionBounds(new VideoMotionVertex((float)(reframe.Center.X-(double)(myWidth/2)/proAspect),(float)(reframe.Center.Y-(double)(myHeight/2))),new VideoMotionVertex((float)(reframe.Center.X+(double)(myWidth/2)/proAspect),(float)(reframe.Center.Y-(double)(myHeight/2))),new VideoMotionVertex((float)(reframe.Center.X+(double)(myWidth/2)/proAspect),(float)(reframe.Center.Y+(double)(myHeight/2))),new VideoMotionVertex((float)(reframe.Center.X-(double)(myWidth/2)/proAspect),(float)(reframe.Center.Y+(double)(myHeight/2))));
+					if (Math.Abs(newBound.TopRight.X-newBound.TopLeft.X) < myWidth){
+						float multiply = myHeight/Math.Abs(newBound.TopRight.X-newBound.TopLeft.X);
+						float toWidth = myWidth/2;
+						float actHeight = Math.Abs(newBound.TopLeft.Y-newBound.BottomLeft.Y/2);
+						newerBound = new VideoMotionBounds(new VideoMotionVertex(reframe.Center.X-toWidth,reframe.Center.Y-actHeight*multiply),new VideoMotionVertex(reframe.Center.X+toWidth,reframe.Center.Y-actHeight*multiply),new VideoMotionVertex(reframe.Center.X+toWidth,reframe.Center.Y+actHeight*multiply),new VideoMotionVertex(reframe.Center.X-toWidth,reframe.Center.Y+actHeight*multiply));
+						newBound = newerBound;
+					}
 				}
 				reframe.Bounds = newBound;//setting the keyframe's size
 				pipevent.Effects.AddEffect(pipeffect);//adding the PiP effect to the event
